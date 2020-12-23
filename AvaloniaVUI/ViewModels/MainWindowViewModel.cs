@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 
 using ReactiveUI;
 using Avalonia.Media;
-using Avalonia.Threading;
 
 using Pv;
 using OpenTK.Audio.OpenAL;
@@ -23,7 +22,7 @@ namespace AvaloniaVUI.ViewModels
             set
             {
                 this.RaiseAndSetIfChanged(ref _isGrapefruit, value);
-                BackgroundColour = bgColours[0];
+                BackgroundColour = _bgColours[0];
             }
         }
 
@@ -34,7 +33,7 @@ namespace AvaloniaVUI.ViewModels
             set
             {
                 this.RaiseAndSetIfChanged(ref _isGrasshopper, value);
-                BackgroundColour = bgColours[1];
+                BackgroundColour = _bgColours[1];
             }
         }
 
@@ -45,7 +44,7 @@ namespace AvaloniaVUI.ViewModels
             set
             {
                 this.RaiseAndSetIfChanged(ref _isBumblebee, value);
-                BackgroundColour = bgColours[2];
+                BackgroundColour = _bgColours[2];
             }
         }
 
@@ -56,18 +55,21 @@ namespace AvaloniaVUI.ViewModels
             set
             {
                 this.RaiseAndSetIfChanged(ref _isBlueberry, value);
-                BackgroundColour = bgColours[3];
+                BackgroundColour = _bgColours[3];
             }
         }
 
         private Color _backgroundColour = Colors.LightGray;
         public Color BackgroundColour { get => _backgroundColour; set => this.RaiseAndSetIfChanged(ref _backgroundColour, value); }
 
-        private readonly List<Color> bgColours = new List<Color>() { Colors.LightPink, Colors.LawnGreen, Colors.Yellow, Colors.BlueViolet };
+        private readonly List<Color> _bgColours = new List<Color>() { Colors.LightPink, Colors.LawnGreen, Colors.Yellow, Colors.BlueViolet };
 
+        private readonly CancellationTokenSource _audioLoopCancelSource;
 
         public MainWindowViewModel()
         {
+            _audioLoopCancelSource = new CancellationTokenSource();
+            CancellationToken audioLoopCancelToken = _audioLoopCancelSource.Token;
             Task.Factory.StartNew(() =>
             {
                 using Porcupine porcupine = Porcupine.Create(keywords: new List<string> { "grapefruit", "grasshopper", "bumblebee", "blueberry" });
@@ -76,7 +78,7 @@ namespace AvaloniaVUI.ViewModels
                 ALCaptureDevice captureDevice = ALC.CaptureOpenDevice(null, porcupine.SampleRate, ALFormat.Mono16, porcupine.FrameLength * 2);
                 {
                     ALC.CaptureStart(captureDevice);
-                    while (true)
+                    while (!audioLoopCancelToken.IsCancellationRequested)
                     {
                         int samplesAvailable = ALC.GetAvailableSamples(captureDevice);
                         if (samplesAvailable > porcupine.FrameLength)
@@ -85,31 +87,28 @@ namespace AvaloniaVUI.ViewModels
 
                             int keywordIndex = porcupine.Process(frameBuffer);
                             if (keywordIndex >= 0)
-                            {
-                                Dispatcher.UIThread.Post(() =>
+                            {                                
+                                switch (keywordIndex)
                                 {
-                                    switch (keywordIndex)
-                                    {
-                                        case 0:
-                                            IsGrapefruit = true;
-                                            break;
-                                        case 1:
-                                            IsGrasshopper = true;
-                                            break;
-                                        case 2:
-                                            IsBumblebee = true;
-                                            break;
-                                        case 3:
-                                            IsBlueberry = true;
-                                            break;
-                                    }
-                                });
+                                    case 0:
+                                        IsGrapefruit = true;
+                                        break;
+                                    case 1:
+                                        IsGrasshopper = true;
+                                        break;
+                                    case 2:
+                                        IsBumblebee = true;
+                                        break;
+                                    case 3:
+                                        IsBlueberry = true;
+                                        break;
+                                }                                
                             }
                         }
                         Thread.Yield();
                     }
                 }
-            });
+            }, audioLoopCancelToken);
         }
     }
 }
